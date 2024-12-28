@@ -31,13 +31,13 @@
   },
   "DA": {
     "text": "Danish",
-    "charset": "UTF-8",
+    "charset": "Cp1252",
     "name": "DA",
     "tr_code": "da"
   },
   "DE": {
     "text": "Deutsch",
-    "charset": "UTF-8",
+    "charset": "Cp1252",
     "name": "DE",
     "tr_code": "de"
   },
@@ -49,26 +49,26 @@
   },
   "ES": {
     "text": "Espanol (ES)",
-    "charset": "UTF-8",
+    "charset": "Cp1252",
     "name": "ES",
     "tr_code": "es"
   },
   "FI": {
     "text": "Finnish",
-    "charset": "UTF-8",
+    "charset": "Cp1252",
     "name": "FI",
     "tr_code": "fi"
   },
   "FR": {
     "text": "Francais",
-    "charset": "UTF-8",
+    "charset": "Cp1252",
     "name": "FR",
     "azerty": "true",
     "tr_code": "fr"
   },
   "HU": {
     "text": "Hungarian",
-    "charset": "UTF-8",
+    "charset": "Cp1250",
     "name": "HU",
     "tr_code": "hu"
   },
@@ -80,7 +80,7 @@
   },
   "IT": {
     "text": "Italiano",
-    "charset": "UTF-8",
+    "charset": "Cp1252",
     "name": "IT",
     "tr_code": "it"
   },
@@ -98,13 +98,13 @@
   },
   "NL": {
     "text": "Nederlands",
-    "charset": "UTF-8",
+    "charset": "Cp1252",
     "name": "NL",
     "tr_code": "nl"
   },
   "NO": {
     "text": "Norsk",
-    "charset": "UTF-8",
+    "charset": "Cp1252",
     "name": "NO",
     "tr_code": "no"
   },
@@ -116,19 +116,19 @@
   },
   "PL": {
     "text": "Polish",
-    "charset": "UTF-8",
+    "charset": "Cp1250",
     "name": "PL",
     "tr_code": "pl"
   },
   "PT": {
     "text": "Portuguese",
-    "charset": "UTF-8",
+    "charset": "Cp1252",
     "name": "PT",
     "tr_code": "pt"
   },
   "PTBR": {
     "text": "Brazilian Portuguese",
-    "charset": "UTF-8",
+    "charset": "Cp1252",
     "name": "PTBR",
     "tr_code": "pt"
   },
@@ -140,7 +140,7 @@
   },
   "RU": {
     "text": "Russian",
-    "charset": "UTF-8",
+    "charset": "Cp1251",
     "name": "RU",
     "tr_code": "ru"
   },
@@ -152,13 +152,13 @@
   },
   "TR": {
     "text": "Turkish",
-    "charset": "UTF-8",
+    "charset": "Cp1254",
     "name": "TR",
     "tr_code": "tr"
   },
   "UA": {
     "text": "Ukrainian",
-    "charset": "UTF-8",
+    "charset": "Cp1251",
     "name": "UA",
     "tr_code": "uk"
   }

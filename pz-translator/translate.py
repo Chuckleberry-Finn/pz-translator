@@ -352,8 +352,38 @@ def try_translate_mod(root: Path) -> bool:
         print("Invalid mod translation dir: ",translate_path)
     return False
 
+def reencode_mod_from_41_to_42(mod_path: Path, folder: str):
+    '''
+    update translations from 41 to 42 version
+    FIXME copy source folder
+    '''
+    # create legacy self
+    legacy_root = mod_path.joinpath('media', 'lua', 'shared', 'Translate')
+    with open(Path(__file__).parent.parent / "LanguagesInfo_b41.json", "r", encoding="utf-8") as f:
+        legacy_info = json.load(f)
+    legacy_self = Translator(legacy_root)
+    # create update self
+    b42_root = mod_path.joinpath(folder, 'media', 'lua', 'shared', 'Translate')
+    file_path = b42_root / legacy_self.config['Translate']['source']
+    file_path.mkdir(parents=True, exist_ok=True)
+    b42_info = PZ_LANGUAGES
+    b42_self = Translator(b42_root)
+    for lang in legacy_self.languages:
+        b42_root.joinpath(lang["name"]).mkdir(exist_ok=True)
+        for file in legacy_self.files:
+            file_path = legacy_self.get_path(lang["name"],file)
+            if file_path.is_file():
+                with open(file_path, "r", encoding=legacy_info[lang['name']]['charset'], errors='replace') as f:
+                    text = f.read()
+                file_path = b42_self.get_path(lang["name"],file)
+                with open(file_path, "w", encoding=b42_info[lang['name']]['charset'], errors='replace') as f:
+                    f.write(text)
+
 def main():
     'main'
+
+    # TODO add reencode command
+    # reencode_mod_from_41_to_42(Path(r'...'), "42.00")
 
     if len(sys.argv) == 1:
         print("< Translating from config file >")
