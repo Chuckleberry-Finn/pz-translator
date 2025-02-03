@@ -51,7 +51,7 @@ class Translator:
         return self.root / lang_id
 
     def batch_translate(self, texts, lang):
-        """Batch translation with caching and parallel execution."""
+        """Batch translation with caching and error handling."""
         unique_texts = list(set(texts))
         if not unique_texts:
             return {}
@@ -63,14 +63,18 @@ class Translator:
             translator = GoogleTranslator(source="en", target=self.language_info[lang]["tr_code"])
             try:
                 translations = translator.translate_batch(texts_to_translate)
+                if translations is None or any(t is None for t in translations):
+                    raise ValueError("Google API returned None for some translations.")
+
                 for original, translated in zip(texts_to_translate, translations):
                     self.translation_cache[(lang, original)] = translated
                     cached_translations[original] = translated
             except Exception as e:
                 print(f"Translation Error ({lang}): {e}")
-                return {}
+                return None  # **Return None if translation fails**
 
         return cached_translations
+
 
     def extract_and_translate(self, text, lang):
         """Extracts quoted text, translates it, and replaces it in the original text."""
@@ -79,13 +83,18 @@ class Translator:
             return text
 
         translated_map = self.batch_translate(quoted_texts, lang)
+
+        if translated_map is None:  # **Detect API failure**
+            return None
+
         return self.QUOTED_TEXT_REGEX.sub(lambda m: f'"{translated_map.get(m.group(1), m.group(1))}"', text)
+
 
     def get_charset(self, lang):
         return self.language_info.get(lang, {}).get("charset", "UTF-8")
 
     def translate_file(self, file, lang, lang_path, charset):
-        """Optimized translation using memory-mapped files."""
+        """Skips writing files if API translation fails."""
         relative_path = file.relative_to(self.get_translation_path(self.source_lang))
         source_filename = relative_path.name
         dest_filename = source_filename.replace("_EN", f"_{lang}")
@@ -95,17 +104,21 @@ class Translator:
             with open(file, "r", encoding="utf-8") as f:
                 source_text = f.read().strip()
             if not source_text:
+                return  # Skip empty files
+
+            translated_text = self.extract_and_translate(source_text, lang)
+
+            # **Detect API failure and skip writing**
+            if translated_text is None:
+                print(f"Skipping file due to API translation failure: {self.clean_path_for_display(file)}")
                 return
-
-            translated_text = self.extract_and_translate(source_text, lang).replace("_EN", f"_{lang}")
-
-            if translated_text.strip() == source_text.strip():
-                return  # Skip writing if no changes
 
             with open(dest_file, "w", encoding=charset, errors="replace") as f:
                 f.write(translated_text)
         except Exception as e:
-            print(f"Error processing {file}: {e}")
+            print(f"Error processing {self.clean_path_for_display(file)}: {e}")
+
+
 
     def translate_files(self):
         """Optimized file processing with parallel execution."""
