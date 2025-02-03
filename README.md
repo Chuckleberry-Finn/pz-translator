@@ -1,12 +1,13 @@
 ## pz-translator <sup><sub><sup><sub>2.0</sup></sub></sup></sub>
 ### Automated batch-capable Project Zomboid translations.
-#### <sup>[original concept](https://github.com/Poltergeist-PZ-Modding/pz-translator) by [Poltergeist](https://github.com/Poltergeist-ix).</sup>
+#### <sup>[original concept](https://github.com/Poltergeist-PZ-Modding/pz-translator) by [Poltergeist](https://github.com/Poltergeist-ix).</sup>  
+<br/>
 
 ## Requirements
 
 - Python 3.11
-- [deep_translator](https://pypi.org/project/deep-translator/) <sup><sub>*(Developed with 1.11.4)*</sup></sub>
-
+- [deep_translator](https://pypi.org/project/deep-translator/) <sup><sub>*(Developed with 1.11.4)*</sup></sub>  
+<br/>
 
 ## How to use
 
@@ -28,8 +29,8 @@ For all mods:
 ```
 
 - The script will parse through every subdirectory to find any `\Translate` directories.
-- Note: Depending on the position relative to a \mods\ folder, the script will utilize  encodings for either B41 or B42.
-# 
+- Note: Depending on the position relative to a \mods\ folder, the script will utilize  encodings for either B41 or B42.  
+<br/>
 
 ### IntelliJ
 Go to the `translate.py` file and select to `edit configurations`.
@@ -37,13 +38,15 @@ Go to the `translate.py` file and select to `edit configurations`.
 
 Once in the configurations menu, enter in a relative path you want processed as the parameter.
 
-> ![image](https://github.com/user-attachments/assets/9e0a0cbf-4aa6-49f6-bd3c-7f35745960a1)
+> ![image](https://github.com/user-attachments/assets/9e0a0cbf-4aa6-49f6-bd3c-7f35745960a1)  
+<br/>
 
 ### Command Line
 example for windows, you can also write this into a cmd file for shortcut.
 ```
 py "repository/pz-translator/translate.py" "relative-path to translate"
-```
+```  
+<br/>
 
 ### VSCode Task
 
@@ -67,12 +70,12 @@ You can add a task like this to run the script. This will target the workspaceFo
 }
 
 ```
-> <sup>See https://go.microsoft.com/fwlink/?LinkId=733558 for the documentation about the tasks.json format</sup>
-
+> <sup>See https://go.microsoft.com/fwlink/?LinkId=733558 for the documentation about the tasks.json format</sup>  
+<br/>
 
 ## Text Translator
 
-Deep translator supports different translators, you can find more information at: [https://pypi.org/project/deep-translator/](https://pypi.org/project/deep-translator/)
+Deep translator supports different translators, you can find more information at: [https://pypi.org/project/deep-translator/](https://pypi.org/project/deep-translator/)  
+<br/>
 
-#
 ### *WARINIG: The script rewrites the translation files, if you are not using version control then keep backups!*
