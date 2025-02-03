@@ -31,6 +31,12 @@ For all mods:
 - Note: Depending on the position relative to a \mods\ folder, the script will utilize  encodings for either B41 or B42.
 # 
 
+### IntelliJ
+Go to the `translate.py` file and select to `edit configurations`.
+![image](https://github.com/user-attachments/assets/371e67be-9af6-4a9a-9642-06c18ed054c4)
+Once in the configurations menu, enter in a relative path you want processed.
+![image](https://github.com/user-attachments/assets/9e0a0cbf-4aa6-49f6-bd3c-7f35745960a1)
+
 ### command line
 example for windows, you can also write this into a cmd file for shortcut.
 ```
