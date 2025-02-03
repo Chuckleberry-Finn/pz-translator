@@ -33,17 +33,19 @@ For all mods:
 
 ### IntelliJ
 Go to the `translate.py` file and select to `edit configurations`.
-![image](https://github.com/user-attachments/assets/371e67be-9af6-4a9a-9642-06c18ed054c4)
-Once in the configurations menu, enter in a relative path you want processed.
-![image](https://github.com/user-attachments/assets/9e0a0cbf-4aa6-49f6-bd3c-7f35745960a1)
+> ![image](https://github.com/user-attachments/assets/371e67be-9af6-4a9a-9642-06c18ed054c4)
 
-### command line
+Once in the configurations menu, enter in a relative path you want processed as the parameter.
+
+> ![image](https://github.com/user-attachments/assets/9e0a0cbf-4aa6-49f6-bd3c-7f35745960a1)
+
+### Command Line
 example for windows, you can also write this into a cmd file for shortcut.
 ```
 py "repository/pz-translator/translate.py" "relative-path to translate"
 ```
 
-### VSCode task
+### VSCode Task
 
 You can add a task like this to run the script. This will target the workspaceFolder for translation.
 ```json
