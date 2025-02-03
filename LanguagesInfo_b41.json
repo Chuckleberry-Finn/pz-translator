@@ -1,0 +1,165 @@
+{
+  "AR": {
+    "text": "Espanol (AR)",
+    "charset": "Cp1252",
+    "name": "AR",
+    "tr_code": "es"
+  },
+  "CA": {
+    "text": "Catalan",
+    "charset": "ISO-8859-15",
+    "name": "CA",
+    "tr_code": "ca"
+  },
+  "CH": {
+    "text": "Traditional Chinese",
+    "charset": "UTF-8",
+    "name": "CH",
+    "tr_code": "zh-TW"
+  },
+  "CN": {
+    "text": "Simplified Chinese",
+    "charset": "UTF-8",
+    "name": "CN",
+    "tr_code": "zh-CN"
+  },
+  "CS": {
+    "text": "Czech",
+    "charset": "Cp1250",
+    "name": "CS",
+    "tr_code": "cs"
+  },
+  "DA": {
+    "text": "Danish",
+    "charset": "Cp1252",
+    "name": "DA",
+    "tr_code": "da"
+  },
+  "DE": {
+    "text": "Deutsch",
+    "charset": "Cp1252",
+    "name": "DE",
+    "tr_code": "de"
+  },
+  "EN": {
+    "text": "English",
+    "charset": "UTF-8",
+    "name": "EN",
+    "tr_code": "en"
+  },
+  "ES": {
+    "text": "Espanol (ES)",
+    "charset": "Cp1252",
+    "name": "ES",
+    "tr_code": "es"
+  },
+  "FI": {
+    "text": "Finnish",
+    "charset": "Cp1252",
+    "name": "FI",
+    "tr_code": "fi"
+  },
+  "FR": {
+    "text": "Francais",
+    "charset": "Cp1252",
+    "name": "FR",
+    "azerty": "true",
+    "tr_code": "fr"
+  },
+  "HU": {
+    "text": "Hungarian",
+    "charset": "Cp1250",
+    "name": "HU",
+    "tr_code": "hu"
+  },
+  "ID": {
+    "text": "Indonesia",
+    "charset": "UTF-8",
+    "name": "ID",
+    "tr_code": "id"
+  },
+  "IT": {
+    "text": "Italiano",
+    "charset": "Cp1252",
+    "name": "IT",
+    "tr_code": "it"
+  },
+  "JP": {
+    "text": "Japanese",
+    "charset": "UTF-8",
+    "name": "JP",
+    "tr_code": "ja"
+  },
+  "KO": {
+    "text": "Korean",
+    "charset": "UTF-16",
+    "name": "KO",
+    "tr_code": "ko"
+  },
+  "NL": {
+    "text": "Nederlands",
+    "charset": "Cp1252",
+    "name": "NL",
+    "tr_code": "nl"
+  },
+  "NO": {
+    "text": "Norsk",
+    "charset": "Cp1252",
+    "name": "NO",
+    "tr_code": "no"
+  },
+  "PH": {
+    "text": "Tagalog",
+    "charset": "UTF-8",
+    "name": "PH",
+    "tr_code": "tl"
+  },
+  "PL": {
+    "text": "Polish",
+    "charset": "Cp1250",
+    "name": "PL",
+    "tr_code": "pl"
+  },
+  "PT": {
+    "text": "Portuguese",
+    "charset": "Cp1252",
+    "name": "PT",
+    "tr_code": "pt"
+  },
+  "PTBR": {
+    "text": "Brazilian Portuguese",
+    "charset": "Cp1252",
+    "name": "PTBR",
+    "tr_code": "pt"
+  },
+  "RO": {
+    "text": "Romanian",
+    "charset": "UTF-8",
+    "name": "RO",
+    "tr_code": "ro"
+  },
+  "RU": {
+    "text": "Russian",
+    "charset": "Cp1251",
+    "name": "RU",
+    "tr_code": "ru"
+  },
+  "TH": {
+    "text": "Thai",
+    "charset": "UTF-8",
+    "name": "TH",
+    "tr_code": "th"
+  },
+  "TR": {
+    "text": "Turkish",
+    "charset": "Cp1254",
+    "name": "TR",
+    "tr_code": "tr"
+  },
+  "UA": {
+    "text": "Ukrainian",
+    "charset": "Cp1251",
+    "name": "UA",
+    "tr_code": "uk"
+  }
+}

@@ -1,377 +1,201 @@
-"""
-Script to process and fill mod translations for Project Zomboid
-"""
-
-import os
+import re
 import sys
-from pathlib import Path
-from shutil import copyfile
 import json
-from configparser import ConfigParser
+import time
+
+from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 from deep_translator import GoogleTranslator
-from languages_info import PZ_LANGUAGES
-from translation_types import TranslateType, TRANSLATION_TYPES
-
-TAG_MODULATION = [
-    ("<", "{<{"),
-    (">", "}>}"),
-    ("%1", "{%1}"),
-    ("%2", "{%2}"),
-    ("%3", "{%3}"),
-]
-
-def tags_mod(text:str):
-    """
-    modulate special tags from changing during translation
-    """
-    for k, v in TAG_MODULATION:
-        text = text.replace(k,v)
-    return text
-
-def tags_demod(text:str):
-    """
-    demodulate special tags
-    """
-    for k, v in TAG_MODULATION:
-        text = text.replace(v,k)
-    return text
 
 class Translator:
-    """
-    Translator class for the "Translate folder"
-    """
 
-    def __init__(self, translate_path: Path = None):
-        config_path = Path(__file__).parent.parent / "config.ini"
-        assert config_path.is_file(), f"Missing config file: {config_path}"
-        self.config = ConfigParser()
-        self.config.read(config_path)
+    QUOTED_TEXT_REGEX = re.compile(r'"([^"]+)"')  # Matches text inside quotes
 
-        if translate_path is None:
-            self.root = Path(self.config["Directories"]["Translate"])
-        else:
-            self.root = translate_path
-        source = self.config["Translate"]["source"]
-        source_path = self.get_path(source)
-        assert source_path.is_dir(), f"Missing source directory: {source_path}"
+    def __init__(self, translate_path: Path, no41: bool):
+        self.root = translate_path
+        self.source_lang = "EN"
 
-        self.warnings = 0
-        self.source_lang = PZ_LANGUAGES[source]
-        self.languages = self.compute_languages()
-        self.files = self.compute_files()
-        self.import_path = None
-        option = self.config.get("Directories", "Import", fallback=None)
-        if option:
-            _path = Path(option).resolve()
-            if _path.is_dir():
-                self.import_path = _path
-            else:
-                self.warn(f"Import directory {_path} is not valid")
-        self.translator = GoogleTranslator(self.source_lang["tr_code"])
-        self.check_gitattributes()
+        # Find the mods folder
+        mods_path = self.find_mods_folder(translate_path)
+        self.language_info_file = self.select_language_info(translate_path, mods_path)
 
-    def get_path(self, lang_id: str, file: TranslateType = None) -> Path:
+        # **Skip processing if -no41 is set and this folder would use LanguagesInfo_b41.json**
+        if no41 and self.language_info_file == "LanguagesInfo_b41.json":
+            print(f"Skipping: {self.clean_path_for_display(translate_path)} (-no41)")
+            self.languages = []
+            return
+
+        self.language_info = self.load_language_info(self.language_info_file)
+        self.languages = [lang for lang in self.language_info if lang != "EN"]
+
+
+    def load_language_info(self, file_name):
         """
-        if file is used then returns the path to the file for the language,
-        otherwise returns the `Translate/language` path.
+        Loads the language info JSON file dynamically.
         """
+        json_path = Path(__file__).parent.parent / file_name
+        with open(json_path, "r", encoding="utf-8") as f:
+            return json.load(f)
 
-        if file is None:
-            return self.root.joinpath(lang_id)
-        return self.root.joinpath(file.get_path(lang_id)).resolve()
 
-    def get_import_path(self, lang_id: str, file: TranslateType) -> Path | None:
+    def clean_path_for_display(self, path):
+        return re.sub(r'.*?\\mods\\', '', str(path))  # Keep only the part after 'mods'
+
+
+    def find_mods_folder(self, path):
         """
-        returns the path of the import file or None if there is no import path
+        Finds the 'mods' folder by traversing up from the given path.
         """
+        while path and path.name.lower() != "mods":
+            path = path.parent
+            if path == path.parent:  # Stop if we reach the root
+                return None
+        return path
 
-        if self.import_path is None:
-            return None
-        return self.import_path.joinpath(file.get_path(lang_id)).resolve()
 
-    def get_translation_type(self, case: str) -> type[TranslateType] | None:
-        'return translation type class'
-
-        ttc = TRANSLATION_TYPES.get(case, None)
-        if ttc is None:
-            self.warn(f'Unknown translation type: {case}')
-        return ttc
-
-    def get_radio_path(self) -> Path | None:
-        'return path of folder containing RadioData'
-
-        if self.root.parts[-4:] == ("media","lua","shared","Translate"):
-            _path = Path(*self.root.parts[:-3],"radio")
-            if _path.exists():
-                return _path
-        else:
-            _path = self.root / "TV_Radio"
-            if _path.exists():
-                return _path
-        return None
-
-    def get_valid_languages(self, translate: list | dict, create: set | list) -> list[dict]:
+    def select_language_info(self, translate_path, mods_path):
         """
-        return final list of languages to translate, removing languages without a directory
+        Determines which LanguagesInfo file to use based on the Translate folder depth.
         """
+        if not mods_path:
+            return "LanguagesInfo.json"  # Default if no mods folder is found
 
-        languages = []
-        for lang in translate:
-            lang_path = self.get_path(lang)
-            if lang_path.is_dir():
-                languages.append(PZ_LANGUAGES[lang])
-            elif lang in create:
-                lang_path.mkdir()
-                languages.append(PZ_LANGUAGES[lang])
+        depth = len(translate_path.relative_to(mods_path).parts)
 
-        return languages
+        if depth == 5:
+            return "LanguagesInfo_b41.json"
+        return "LanguagesInfo.json"
 
-    def compute_languages(self):
-        "compute languages for translation"
 
-        option = self.config.get("Translate","languagesExclude",fallback=None)
-        if option:
-            lang_exclude = {x for x in [x.strip() for x in option.split(",")] if x in PZ_LANGUAGES}
-        else:
-            lang_exclude = set()
-        lang_exclude.add(self.source_lang["name"])
-        option = self.config.get("Translate","languagesTranslate",fallback=None)
-        if option:
-            lang_translate = [x for x in [x.strip() for x in option.split(",")] if x not in lang_exclude and x in PZ_LANGUAGES]
-        else:
-            lang_translate = [x for x in PZ_LANGUAGES if x not in lang_exclude]
-        option = self.config.get("Translate","languagesCreate",fallback=None)
-        if option:
-            lang_create = {x for x in [x.strip() for x in option.split(",")] if x in lang_translate}
-        else:
-            lang_create = lang_translate
+    def get_translation_path(self, lang_id: str):
+        return self.root / lang_id
 
-        return self.get_valid_languages(lang_translate,lang_create)
 
-    def compute_files(self) -> list[TranslateType]:
+    def batch_translate(self, texts, lang):
         """
-        get list of source files to translate.
+        Translates a batch of quoted strings only.
         """
+        unique_texts = list(set(texts))  # Remove duplicates
+        if not unique_texts:
+            return {}
 
-        files = []
-        option = self.config.get("Translate","files",fallback=None)
-        if option:
-            for each in option.split():
-                each = each.strip()
-                tclass = self.get_translation_type(each)
-                if tclass is None:
-                    continue
-                tobj = tclass(self)
-                if self.get_path(self.source_lang["name"], tobj).is_file():
-                    files.append(tobj)
-        else:
-            suffix = f'_{self.source_lang["name"]}.txt'
-            source_path = self.get_path(self.source_lang["name"])
-            with os.scandir(source_path) as dir_entries:
-                for each in dir_entries:
-                    if each.is_dir():
-                        for name in ["title.txt","description.txt"]:
-                            for fp in Path(each).rglob(name):
-                                tclass = self.get_translation_type("MapInfo")
-                                files.append(tclass(self,str(fp.relative_to(source_path))))
-                    elif each.name.endswith(suffix):
-                        tclass = self.get_translation_type(each.name.removesuffix(suffix))
-                        if tclass is not None:
-                            files.append(tclass(self))
-            # source_path = self.get_radio_path()
-            # if source_path:
-            #     tclass = self.get_translation_type("RadioData")
-            #     files.append(tclass(self))
-        return files
-
-    def translate_missing(self, tlang: dict, file: TranslateType, src_map: dict, tr_map: dict):
-        'translate missing texts using translators single text function'
-
-        #import saved auto-translations
-        file_path = self.get_path(tlang["name"], file)
-        temp_file_path = file_path.parent.joinpath(f'{file_path.stem}_translator_temp.txt')
-        auto_translations = {}
-        if temp_file_path.is_file():
-            file.parse_translation(temp_file_path, tlang, auto_translations, True)
-            for key, text in auto_translations.items():
-                if key not in tr_map:
-                    tr_map[key] = text 
-        #check missing and translate
-        untranslated = [key for key in src_map if not tr_map.get(key, None)]
-        if untranslated:
-            print(f" - Translating number of texts: {len(untranslated)}")
-            self.translator.target = tlang["tr_code"]
-            try:
-                for key in untranslated:
-                    tr_map[key] = tags_demod(self.translator.translate(tags_mod(src_map[key])))
-            except KeyboardInterrupt:
-                for key in untranslated:
-                    if key not in tr_map:
-                        break
-                    auto_translations[key] = tr_map[key]
-                file.export(temp_file_path, tlang, auto_translations)
-                raise
-            except Exception:
-                self.warn("failed to translate file")
-                for key in reversed(untranslated):
-                    if key in tr_map:
-                        break
-                    tr_map[key] = ""
-        #remove temp file
-        temp_file_path.unlink(missing_ok=True)
-
-    def get_translations(self, source_texts: dict, tr_lang: dict, file: TranslateType) -> dict:
-        'return dictionary with translation texts'
-
-        tr_map = {}
-        tr_map["__language_name__"] = tr_lang["name"]
-        # add existing tranlsations
-        fp = self.get_path(tr_lang["name"], file)
-        if fp.is_file():
-            file.parse_translation(fp, tr_lang, tr_map)
-        # import translations on top
-        fp = self.get_import_path(tr_lang["name"],file)
-        if fp and fp.is_file():
-            file.parse_translation(fp, tr_lang, tr_map, True)
-        # translate missing
-        self.translate_missing(tr_lang, file, source_texts, tr_map)
-        return tr_map
-
-    def write_translation(self, lang: dict, file: TranslateType, text: str):
-        'write the translation file'
-
+        translator = GoogleTranslator(source="en", target=self.language_info[lang]["tr_code"])
         try:
-            with open(self.get_path(lang["name"],file),"w",encoding=lang["charset"],errors="replace") as f:
-                f.write(text)
+            translations = translator.translate_batch(unique_texts)  # Batch API call
+            if not translations or len(translations) != len(unique_texts):
+                print(f"Warning: Batch translation failed for {lang}")
+                return {}
+            return dict(zip(unique_texts, translations))
         except Exception as e:
-            self.warn(f"Failed to write {lang['name']} {file.name}\nException: {e}\nText:\n{text}")
+            print(f"Translation Error ({lang}): {e}")
+            return {}
 
-    def translate_main(self):
+
+    def extract_and_translate(self, text, lang):
         """
-        translate class instance
+        Extracts only text inside quotes and translates it.
+        Non-quoted text remains unchanged.
         """
+        quoted_texts = self.QUOTED_TEXT_REGEX.findall(text)  # Extract only quoted content
 
-        for file in self.files:
-            source_fp = self.get_path(self.source_lang["name"],file)
-            template, source_map = file.parse_source(source_fp, self.source_lang)
-            for lang in self.languages:
-                # translate, paste template, or remove.
-                if source_map:
-                    print(f"Begin Translation Check for: {file.name}, {lang['name']}, {lang['text']}")
-                    self.write_translation(lang,file,template.safe_substitute(self.get_translations(source_map,lang,file)))
-                elif template:
-                    self.write_translation(lang,file,template)
-                else:
-                    self.get_path(lang["name"],file).unlink(missing_ok=True)
-        print(f"\nFinished with {self.warnings} warnings.")
+        if not quoted_texts:
+            return text  # No quotes found, return as-is
 
-    def translate_specific(self, languages: list | dict, files: list, languages_create: set[str]):
+        translated_map = self.batch_translate(quoted_texts, lang)
+
+        return self.QUOTED_TEXT_REGEX.sub(lambda m: f'"{translated_map.get(m.group(1), m.group(1))}"', text)
+
+
+    def get_charset(self, lang):
         """
-        translate specific languages and files
+        Gets encoding charset for the language from the selected LanguagesInfo file.
+        Defaults to UTF-8 if missing.
         """
+        return self.language_info.get(lang, {}).get("charset", "UTF-8")
 
-        self.files = [c() for c in [self.get_translation_type(x) for x in files] if c is not None]
-        self.languages = self.get_valid_languages(languages,languages_create)
-        self.translate_main()
 
-    def reencode_translations(self, read: dict, languages: list = None, files: list = None,
-                              errors: str | None = "replace"):
-        '''
-        attempt to convert to appropriate encoding
-        '''
+    def translate_file(self, file, lang, lang_path, charset):
+        """
+        Translates only quoted phrases within a file and always overwrites existing translations.
+        """
+        relative_path = file.relative_to(self.get_translation_path(self.source_lang))
+        source_filename = relative_path.name
+        dest_filename = source_filename.replace("_EN", f"_{lang}")
 
-        if not languages:
-            languages = self.languages
+        dest_file = lang_path / relative_path.with_name(dest_filename)
+
+        with open(file, "r", encoding="utf-8") as f:
+            source_text = f.read().strip()
+
+        if not source_text:
+            return  # Skip empty files
+
+        translated_text = self.extract_and_translate(source_text, lang)
+        translated_text = translated_text.replace("_EN", f"_{lang}")
+
+        if translated_text.strip() == source_text.strip():
+            print(f"Skipping (No Change): {source_filename} -> {dest_filename} ({lang})")
+            return  # Skip writing if no changes were made
+
+        with open(dest_file, "w", encoding=charset, errors="replace") as f:
+            f.write(translated_text)
+
+        # print(f"Overwritten: {source_filename} -> {dest_filename} ({lang})")
+
+
+    def translate_files(self):
+        """
+        Translates all files inside the 'Translate' directory, only printing if files are actually processed.
+        """
+        source_path = self.get_translation_path(self.source_lang)
+        if not source_path.is_dir() or not self.languages:
+            return  # Skip processing if no languages are set (e.g., due to -no41)
+
+        files = list(source_path.rglob("*.txt"))  # Collect files before printing
+
         if not files:
-            files = self.files
-        for lang in languages:
-            for file in files:
-                file_path = self.get_path(lang["name"],file)
-                if file_path.is_file():
-                    with open(file_path, "r", encoding=read[lang["name"]], errors=errors) as f:
-                        text = f.read()
-                    with open(file_path, "w", encoding=lang["charset"], errors=errors) as f:
-                        f.write(text)
+            return  # Skip printing if there are no translatable files
 
-    def reencode_initial(self):
-        '''
-        Rewrites existing files, assumes files were using correct encoding. 
-        Use when first adding gitattributes file without translating files.
-        '''
+        # Clean up path for display
+        display_path = self.clean_path_for_display(self.root)
 
-        self.reencode_translations(
-            { lang["name"]: lang["charset"] for lang in PZ_LANGUAGES.values() },
-            [self.source_lang] + self.languages,
-            self.files
-        )
+        # Start timing
+        start_time = time.perf_counter()
 
-    def check_gitattributes(self):
-        """
-        add gitattributes file if it doesn't exist
-        """
+        print(f"Processing: {display_path} using {self.language_info_file}")
 
-        if not self.config.getboolean("DEFAULT","create_gitattributes"):
-            return
-        fpath = self.root / ".gitattributes"
-        if not fpath.is_file():
-            copyfile(Path(__file__).parent.parent / "templates" / ".gitattributes",fpath,follow_symlinks=False)
-            if self.config.getboolean("DEFAULT","pause_on_gitattributes"):
-                self.reencode_initial()
-                input("Added .gitattributes file. Press Enter to continue.\n")
+        for lang in self.languages:
+            lang_path = self.get_translation_path(lang)
+            lang_path.mkdir(exist_ok=True)
+            charset = self.get_charset(lang)
 
-    def warn(self, message: str):
-        """print warning message"""
-        self.warnings += 1
-        print(f" - Warning: {message}")
+            with ThreadPoolExecutor() as executor:
+                executor.map(lambda file: self.translate_file(file, lang, lang_path, charset), files)
 
-def try_translate_project(root: Path) -> bool:
-    'translate project'
+        # End timing
+        elapsed_time = (time.perf_counter() - start_time) * 1000  # Convert to milliseconds
+        print(f"Completed: {display_path} in {elapsed_time:.2f} ms")
 
-    if root.joinpath("project.json").is_file():
-        print(f"< Translating project: {root.name} >")
-        r = False
-        with open(root.joinpath("project.json"),"r",encoding="utf-8") as f:
-            project = json.load(f)
-        exclude = project.get("workshop",{}).get("excludes",[])
-        for mod_id in project.get("mods",[]):
-            if mod_id in exclude:
-                continue
-            r = try_translate_mod(root / mod_id) or r
-        return r
-    return False
 
-def try_translate_mod(root: Path) -> bool:
-    'translate mod'
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print("Usage: python translate.py <directory_path> [-no41]")
+        sys.exit(1)
 
-    if root.joinpath("mod.info").is_file():
-        print(f"< Translating mod: {root.name} >")
-        translate_path = root.joinpath("media","lua","shared","Translate")
-        if translate_path.is_dir():
-            Translator(translate_path).translate_main()
-            return True
-        print("Invalid mod translation dir: ",translate_path)
-    return False
+    base_dir = Path(sys.argv[1]).resolve()
+    no41 = "-no41" in sys.argv  # Detect the -no41 flag
 
-def main():
-    'main'
+    if not base_dir.is_dir():
+        print(f"Invalid directory: {base_dir}")
+        sys.exit(1)
 
-    if len(sys.argv) == 1:
-        print("< Translating from config file >")
-        Translator().translate_main()
-    else:
-        root = Path(sys.argv[1]).resolve()
-        if not root.is_dir():
-            print(f"Directory {root} does not exist:")
-        elif try_translate_project(root):
-            return
-        elif try_translate_mod(root):
-            return
-        else:
-            print("< Translating directory >")
-            Translator(root).translate_main()
+    total_start_time = time.perf_counter()  # Start total time tracking
 
-if __name__ == '__main__':
-    try:
-        main()
-    except KeyboardInterrupt:
-        print("\nInterrupted by user")
+    for translate_dir in base_dir.rglob("Translate"):
+        translator = Translator(translate_dir, no41)
+        translator.translate_files()
+
+    total_elapsed_time = (time.perf_counter() - total_start_time) * 1000  # Convert to ms
+    print(f"\nTotal Processing Time: {total_elapsed_time:.2f} ms")
+
+
