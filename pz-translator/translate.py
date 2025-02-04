@@ -93,6 +93,9 @@ class Translator:
 
 
     def extract_and_translate(self, text, lang):
+        if text.startswith("--"):  # Ignore commented lines
+            return text
+
         quoted_texts = self.QUOTED_TEXT_REGEX.findall(text)
         if not quoted_texts:
             return text
