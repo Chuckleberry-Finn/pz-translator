@@ -17,6 +17,7 @@ class Translator:
     def __init__(self, translate_path: Path, no41: bool):
         self.root = translate_path
         self.source_lang = "EN"
+        self.api_call_count = 0  # Track API calls
 
         mods_path = self.find_mods_folder(translate_path)
         self.language_info_file = self.select_language_info(translate_path, mods_path)
@@ -68,6 +69,7 @@ class Translator:
         if not texts:
             return {}
 
+        self.api_call_count += 1  # Increment API call count
         cached_translations = {text: self.translation_cache.get((lang, text)) for text in texts}
         texts_to_translate = [text for text, trans in cached_translations.items() if trans is None]
 
@@ -112,10 +114,11 @@ class Translator:
         if not files:
             return
 
-        start_time = time.perf_counter()
+        total_start_time = time.perf_counter()
         print(f"Processing: {self.clean_path_for_display(self.root)} using {self.language_info_file}")
 
         def process_language(lang):
+            lang_start_time = time.perf_counter()
             lang_path = self.get_translation_path(lang)
             lang_path.mkdir(exist_ok=True)
             text_map = {}
@@ -159,14 +162,15 @@ class Translator:
                 for future in as_completed(file_futures):
                     future.result()
 
+            lang_elapsed_time = (time.perf_counter() - lang_start_time) * 1000
+            print(f"Completed: {self.clean_path_for_display(self.root)} - {lang} in {lang_elapsed_time:.2f} ms")
+
         with ThreadPoolExecutor() as lang_executor:
             lang_futures = [lang_executor.submit(process_language, lang) for lang in self.languages]
             for future in as_completed(lang_futures):
                 future.result()
 
-        elapsed_time = (time.perf_counter() - start_time) * 1000
-        print(f"Completed: {self.clean_path_for_display(self.root)} in {elapsed_time:.2f} ms")
-
+        print(f"Total API calls made: {self.api_call_count}")
 
 
 if __name__ == "__main__":
