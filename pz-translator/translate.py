@@ -2,6 +2,7 @@ import re
 import sys
 import json
 import time
+import argparse
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from deep_translator import GoogleTranslator
@@ -179,9 +180,13 @@ if __name__ == "__main__":
         print("Usage: python translate.py <directory_path> [-no41]")
         sys.exit(1)
 
-    path_arg = " ".join(sys.argv[1:]).strip()  # Capture full path, including spaces
-    base_dir = Path(path_arg).resolve()
-    no41 = "-no41" in sys.argv
+    parser = argparse.ArgumentParser(description="Translate script.")
+    parser.add_argument("directory", type=str, help="Path to the translation directory")
+    parser.add_argument("-no41", action="store_true", help="Skip b41 translations")
+
+    args = parser.parse_args()
+    base_dir = Path(args.directory).resolve()
+    no41 = args.no41
 
     if not base_dir.is_dir():
         print(f"Invalid directory: {base_dir}")
