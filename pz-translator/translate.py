@@ -92,56 +92,19 @@ class Translator:
         return cached_translations
 
 
-
     def extract_and_translate(self, text, lang):
         if text.startswith("--"):  # Ignore commented lines
             return text
 
-        # Regex pattern to detect and preserve placeholders/tags
-        tag_pattern = re.compile(r'(<[^<>]+>)|(\[[^\[\]]+\])|(%\d)')
-
-        # Split text into translatable and preserved sections
-        split_text = tag_pattern.split(text)
-
-        to_translate = []
-        preserved_sections = {}
-
-        # Identify translatable vs. preserved content
-        for index, segment in enumerate(split_text):
-            if segment is None or segment.strip() == "":
-                continue
-            if tag_pattern.match(segment):  # Preserve this part
-                preserved_sections[index] = segment
-            else:  # Send for translation
-                to_translate.append(segment)
-
-        if not to_translate:
+        quoted_texts = self.QUOTED_TEXT_REGEX.findall(text)
+        if not quoted_texts:
             return text
 
-        # Translate only the non-tag parts
-        translated_map = self.batch_translate(to_translate, lang)
-
+        translated_map = self.batch_translate(quoted_texts, lang)
         if translated_map is None:
-            return text  # If translation fails, return original
+            return None
 
-        # Reconstruct the sentence
-        reconstructed_text = []
-        to_translate_index = 0
-
-        for index, segment in enumerate(split_text):
-            if index in preserved_sections:
-                reconstructed_text.append(preserved_sections[index])  # Keep preserved parts
-            elif segment.strip():  # Replace with translated text
-                reconstructed_text.append(translated_map.get(segment, segment))
-            else:
-                reconstructed_text.append(segment)  # Keep spaces intact
-
-        final_text = "".join(reconstructed_text)
-
-        return final_text
-
-
-
+        return self.QUOTED_TEXT_REGEX.sub(lambda m: translated_map.get(m.group(1), m.group(1)), text)
 
     def get_charset(self, lang):
         return self.language_info.get(lang, {}).get("charset", "UTF-8")
@@ -190,8 +153,7 @@ class Translator:
                         if header_match:
                             translated_lines.append(f"{header_match.group(1)}_{lang} = {{\n")
                             continue
-                        translated_line = self.extract_and_translate(line, lang)
-                        translated_lines.append(translated_line)
+                        translated_lines.append(self.QUOTED_TEXT_REGEX.sub(lambda m: f'"{translated_map.get(m.group(1), m.group(1))}"', line))
 
                     dest_file = lang_path / file.relative_to(source_path).with_name(file.stem.replace("_EN", f"_{lang}") + file.suffix)
                     with open(dest_file, "w", encoding="utf-8", errors="replace") as f:
