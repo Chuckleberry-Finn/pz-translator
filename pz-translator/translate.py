@@ -178,7 +178,8 @@ if __name__ == "__main__":
         print("Usage: python translate.py <directory_path> [-no41]")
         sys.exit(1)
 
-    base_dir = Path(sys.argv[1]).resolve()
+    path_arg = " ".join(sys.argv[1:]).strip()  # Capture full path, including spaces
+    base_dir = Path(path_arg).resolve()
     no41 = "-no41" in sys.argv
 
     if not base_dir.is_dir():
