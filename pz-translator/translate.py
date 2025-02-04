@@ -8,6 +8,11 @@ from deep_translator import GoogleTranslator
 
 class Translator:
     QUOTED_TEXT_REGEX = re.compile(r'"([^"]+)"')
+    TAG_MODULATION = [
+        ("<", "{<{"), (">", "}>}"),  # Protect HTML-like tags
+        ("[", "{[{"), ("]", "}]}"),  # Protect square brackets
+        ("%1", "{%1}"), ("%2", "{%2}"), ("%3", "{%3}"),  # Protect placeholders
+    ]
 
     def __init__(self, translate_path: Path, no41: bool):
         self.root = translate_path
@@ -23,7 +28,17 @@ class Translator:
 
         self.language_info = self.load_language_info(self.language_info_file)
         self.languages = [lang for lang in self.language_info if lang != "EN"]
-        self.translation_cache = {}  # Cache to store translations
+        self.translation_cache = {}
+
+    def modulate_tags(self, text: str) -> str:
+        for k, v in self.TAG_MODULATION:
+            text = text.replace(k, v)
+        return text
+
+    def demodulate_tags(self, text: str) -> str:
+        for k, v in self.TAG_MODULATION:
+            text = text.replace(v, k)
+        return text
 
     def load_language_info(self, file_name):
         json_path = Path(__file__).parent.parent / file_name
@@ -43,7 +58,6 @@ class Translator:
     def select_language_info(self, translate_path, mods_path):
         if not mods_path:
             return "LanguagesInfo.json"
-
         depth = len(translate_path.relative_to(mods_path).parts)
         return "LanguagesInfo_b41.json" if depth == 5 else "LanguagesInfo.json"
 
@@ -51,77 +65,45 @@ class Translator:
         return self.root / lang_id
 
     def batch_translate(self, texts, lang):
-        """Batch translation with caching and error handling."""
-        unique_texts = list(set(texts))
-        if not unique_texts:
+        if not texts:
             return {}
 
-        cached_translations = {text: self.translation_cache.get((lang, text)) for text in unique_texts}
+        cached_translations = {text: self.translation_cache.get((lang, text)) for text in texts}
         texts_to_translate = [text for text, trans in cached_translations.items() if trans is None]
 
         if texts_to_translate:
-            translator = GoogleTranslator(source="en", target=self.language_info[lang]["tr_code"])
             try:
+                translator = GoogleTranslator(source="en", target=self.language_info[lang]["tr_code"])
                 translations = translator.translate_batch(texts_to_translate)
-                if translations is None or any(t is None for t in translations):
-                    raise ValueError("Google API returned None for some translations.")
+
+                if not translations:
+                    raise ValueError("Google API returned an empty response.")
 
                 for original, translated in zip(texts_to_translate, translations):
                     self.translation_cache[(lang, original)] = translated
                     cached_translations[original] = translated
             except Exception as e:
                 print(f"Translation Error ({lang}): {e}")
-                return None  # **Return None if translation fails**
+                return None
 
         return cached_translations
 
 
     def extract_and_translate(self, text, lang):
-        """Extracts quoted text, translates it, and replaces it in the original text."""
         quoted_texts = self.QUOTED_TEXT_REGEX.findall(text)
         if not quoted_texts:
             return text
 
         translated_map = self.batch_translate(quoted_texts, lang)
-
-        if translated_map is None:  # **Detect API failure**
+        if translated_map is None:
             return None
 
-        return self.QUOTED_TEXT_REGEX.sub(lambda m: f'"{translated_map.get(m.group(1), m.group(1))}"', text)
-
+        return self.QUOTED_TEXT_REGEX.sub(lambda m: translated_map.get(m.group(1), m.group(1)), text)
 
     def get_charset(self, lang):
         return self.language_info.get(lang, {}).get("charset", "UTF-8")
 
-    def translate_file(self, file, lang, lang_path, charset):
-        """Skips writing files if API translation fails."""
-        relative_path = file.relative_to(self.get_translation_path(self.source_lang))
-        source_filename = relative_path.name
-        dest_filename = source_filename.replace("_EN", f"_{lang}")
-        dest_file = lang_path / relative_path.with_name(dest_filename)
-
-        try:
-            with open(file, "r", encoding="utf-8") as f:
-                source_text = f.read().strip()
-            if not source_text:
-                return  # Skip empty files
-
-            translated_text = self.extract_and_translate(source_text, lang)
-
-            # **Detect API failure and skip writing**
-            if translated_text is None:
-                print(f"Skipping file due to API translation failure: {self.clean_path_for_display(file)}")
-                return
-
-            with open(dest_file, "w", encoding=charset, errors="replace") as f:
-                f.write(translated_text)
-        except Exception as e:
-            print(f"Error processing {self.clean_path_for_display(file)}: {e}")
-
-
-
     def translate_files(self):
-        """Optimized file processing with parallel execution."""
         source_path = self.get_translation_path(self.source_lang)
         if not source_path.is_dir() or not self.languages:
             return
@@ -133,21 +115,58 @@ class Translator:
         start_time = time.perf_counter()
         print(f"Processing: {self.clean_path_for_display(self.root)} using {self.language_info_file}")
 
+        def process_language(lang):
+            lang_path = self.get_translation_path(lang)
+            lang_path.mkdir(exist_ok=True)
+
+            text_map = {}
+            for file in files:
+                try:
+                    with open(file, "r", encoding="utf-8") as f:
+                        lines = f.readlines()
+
+                    for line in lines:
+                        quoted_texts = self.QUOTED_TEXT_REGEX.findall(line)
+                        for text in quoted_texts:
+                            modulated_text = self.modulate_tags(text)
+                            text_map[modulated_text] = text_map.get(modulated_text, set())
+                            text_map[modulated_text].add(file)
+                except Exception as e:
+                    print(f"Error reading {file.name}: {e}")
+
+            translated_map = self.batch_translate(list(text_map.keys()), lang)
+            if translated_map is None:
+                return
+
+            for file in files:
+                try:
+                    with open(file, "r", encoding="utf-8") as f:
+                        lines = f.readlines()
+
+                    translated_lines = []
+                    for line in lines:
+                        header_match = re.match(r'^(.+?)_EN\s*=\s*{', line)
+                        if header_match:
+                            translated_lines.append(f"{header_match.group(1)}_{lang} = {{\n")
+                            continue
+                        translated_line = self.QUOTED_TEXT_REGEX.sub(lambda m: f'"{self.demodulate_tags(translated_map.get(self.modulate_tags(m.group(1)), m.group(1)))}"', line)
+                        translated_lines.append(translated_line)
+
+                    dest_file = lang_path / file.relative_to(source_path).with_name(file.stem.replace("_EN", f"_{lang}") + file.suffix)
+                    with open(dest_file, "w", encoding="utf-8", errors="replace") as f:
+                        f.writelines(translated_lines)
+                except Exception as e:
+                    print(f"Error writing {file.name}: {e}")
+
         with ThreadPoolExecutor() as executor:
-            futures = []
-            for lang in self.languages:
-                lang_path = self.get_translation_path(lang)
-                lang_path.mkdir(exist_ok=True)
-                charset = self.get_charset(lang)
-
-                for file in files:
-                    futures.append(executor.submit(self.translate_file, file, lang, lang_path, charset))
-
+            futures = [executor.submit(process_language, lang) for lang in self.languages]
             for future in as_completed(futures):
-                future.result()  # Ensure exceptions are raised if any
+                future.result()
 
         elapsed_time = (time.perf_counter() - start_time) * 1000
         print(f"Completed: {self.clean_path_for_display(self.root)} in {elapsed_time:.2f} ms")
+
+
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
@@ -162,9 +181,11 @@ if __name__ == "__main__":
         sys.exit(1)
 
     total_start_time = time.perf_counter()
-
     with ThreadPoolExecutor() as executor:
-        futures = [executor.submit(Translator(translate_dir, no41).translate_files) for translate_dir in base_dir.rglob("Translate")]
+        futures = [
+            executor.submit(Translator(translate_dir, no41).translate_files)
+            for translate_dir in base_dir.rglob("Translate")
+        ]
 
         for future in as_completed(futures):
             future.result()
