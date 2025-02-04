@@ -118,19 +118,16 @@ class Translator:
         def process_language(lang):
             lang_path = self.get_translation_path(lang)
             lang_path.mkdir(exist_ok=True)
-
             text_map = {}
+
             for file in files:
                 try:
                     with open(file, "r", encoding="utf-8") as f:
-                        lines = f.readlines()
-
-                    for line in lines:
-                        quoted_texts = self.QUOTED_TEXT_REGEX.findall(line)
-                        for text in quoted_texts:
-                            modulated_text = self.modulate_tags(text)
-                            text_map[modulated_text] = text_map.get(modulated_text, set())
-                            text_map[modulated_text].add(file)
+                        for line in f:
+                            quoted_texts = self.QUOTED_TEXT_REGEX.findall(line)
+                            for text in quoted_texts:
+                                text_map[text] = text_map.get(text, set())
+                                text_map[text].add(file)
                 except Exception as e:
                     print(f"Error reading {file.name}: {e}")
 
@@ -138,7 +135,7 @@ class Translator:
             if translated_map is None:
                 return
 
-            for file in files:
+            def process_file(file):
                 try:
                     with open(file, "r", encoding="utf-8") as f:
                         lines = f.readlines()
@@ -149,8 +146,7 @@ class Translator:
                         if header_match:
                             translated_lines.append(f"{header_match.group(1)}_{lang} = {{\n")
                             continue
-                        translated_line = self.QUOTED_TEXT_REGEX.sub(lambda m: f'"{self.demodulate_tags(translated_map.get(self.modulate_tags(m.group(1)), m.group(1)))}"', line)
-                        translated_lines.append(translated_line)
+                        translated_lines.append(self.QUOTED_TEXT_REGEX.sub(lambda m: f'"{translated_map.get(m.group(1), m.group(1))}"', line))
 
                     dest_file = lang_path / file.relative_to(source_path).with_name(file.stem.replace("_EN", f"_{lang}") + file.suffix)
                     with open(dest_file, "w", encoding="utf-8", errors="replace") as f:
@@ -158,9 +154,14 @@ class Translator:
                 except Exception as e:
                     print(f"Error writing {file.name}: {e}")
 
-        with ThreadPoolExecutor() as executor:
-            futures = [executor.submit(process_language, lang) for lang in self.languages]
-            for future in as_completed(futures):
+            with ThreadPoolExecutor() as file_executor:
+                file_futures = [file_executor.submit(process_file, file) for file in files]
+                for future in as_completed(file_futures):
+                    future.result()
+
+        with ThreadPoolExecutor() as lang_executor:
+            lang_futures = [lang_executor.submit(process_language, lang) for lang in self.languages]
+            for future in as_completed(lang_futures):
                 future.result()
 
         elapsed_time = (time.perf_counter() - start_time) * 1000
