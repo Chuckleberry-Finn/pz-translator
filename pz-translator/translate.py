@@ -8,11 +8,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from deep_translator import GoogleTranslator
 
 class Translator:
-    QUOTED_TEXT_REGEX = re.compile(r'"([^"]+)"')
+    QUOTED_TEXT_REGEX = re.compile(r'"([^"%<>\[\]]+)"')  # Avoid translating placeholders, tags
     TAG_MODULATION = [
         ("<", "{<{"), (">", "}>}"),  # Protect HTML-like tags
         ("[", "{[{"), ("]", "}]}"),  # Protect square brackets
-        ("%1", "{%1}"), ("%2", "{%2}"), ("%3", "{%3}"),  # Protect placeholders
+        ("%1", "{%1}"), ("%2", "{%2}"), ("%3", "{%3}"), ("%4", "{%4}"), ("%5", "{%5}")  # Protect placeholders
     ]
 
     def __init__(self, translate_path: Path, no41: bool):
