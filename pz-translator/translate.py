@@ -163,7 +163,8 @@ class Translator:
                     future.result()
 
             lang_elapsed_time = (time.perf_counter() - lang_start_time) * 1000
-            print(f"Completed: {self.clean_path_for_display(self.root)} - {lang} in {lang_elapsed_time:.2f} ms")
+            charset = self.get_charset(lang)  # Retrieve charset for the language
+            print(f"Completed: {self.clean_path_for_display(self.root)} - {lang} in {lang_elapsed_time:.2f} ms (Encoding: {charset})")
 
         with ThreadPoolExecutor() as lang_executor:
             lang_futures = [lang_executor.submit(process_language, lang) for lang in self.languages]
