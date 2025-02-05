@@ -15,7 +15,7 @@ class Translator:
         ("%1", "{%1}"), ("%2", "{%2}"), ("%3", "{%3}"), ("%4", "{%4}"), ("%5", "{%5}")  # Protect placeholders
     ]
 
-    def __init__(self, translate_path: Path, no41: bool):
+    def __init__(self, translate_path: Path, no41: bool, enabled_languages: list):
         self.root = translate_path
         self.source_lang = "EN"
         self.api_call_count = 0  # Track API calls
@@ -29,7 +29,7 @@ class Translator:
             return
 
         self.language_info = self.load_language_info(self.language_info_file)
-        self.languages = [lang for lang in self.language_info if lang != "EN"]
+        self.languages = [lang for lang in self.language_info if lang != "EN" and (not enabled_languages or lang in enabled_languages)]
         self.translation_cache = {}
 
     def modulate_tags(self, text: str) -> str:
@@ -59,9 +59,9 @@ class Translator:
 
     def select_language_info(self, translate_path, mods_path):
         if not mods_path:
-            return "LanguagesInfo.json"
+            return "LanguagesInfo_b42.json"
         depth = len(translate_path.relative_to(mods_path).parts)
-        return "LanguagesInfo_b41.json" if depth == 5 else "LanguagesInfo.json"
+        return "LanguagesInfo_b41.json" if depth == 5 else "LanguagesInfo_b42.json"
 
     def get_translation_path(self, lang_id: str):
         return self.root / lang_id
@@ -77,19 +77,25 @@ class Translator:
         if texts_to_translate:
             try:
                 translator = GoogleTranslator(source="en", target=self.language_info[lang]["tr_code"])
-                translations = translator.translate_batch(texts_to_translate)
+
+                # Apply modulation to protect tags before translation
+                modulated_texts = [self.modulate_tags(text) for text in texts_to_translate]
+                translations = translator.translate_batch(modulated_texts)
 
                 if not translations:
                     raise ValueError("Google API returned an empty response.")
 
                 for original, translated in zip(texts_to_translate, translations):
-                    self.translation_cache[(lang, original)] = translated
-                    cached_translations[original] = translated
+                    # Demodulate the translation to restore original tags
+                    final_translation = self.demodulate_tags(translated)
+                    self.translation_cache[(lang, original)] = final_translation
+                    cached_translations[original] = final_translation
             except Exception as e:
                 print(f"Translation Error ({lang}): {e}")
                 return None
 
         return cached_translations
+
 
 
     def extract_and_translate(self, text, lang):
@@ -100,11 +106,18 @@ class Translator:
         if not quoted_texts:
             return text
 
-        translated_map = self.batch_translate(quoted_texts, lang)
+        # Modulate tags before translation
+        modulated_texts = [self.modulate_tags(t) for t in quoted_texts]
+
+        translated_map = self.batch_translate(modulated_texts, lang)
         if translated_map is None:
             return None
 
-        return self.QUOTED_TEXT_REGEX.sub(lambda m: translated_map.get(m.group(1), m.group(1)), text)
+        # Demodulate tags after translation
+        demodulated_map = {self.demodulate_tags(k): self.demodulate_tags(v) for k, v in translated_map.items()}
+
+        return self.QUOTED_TEXT_REGEX.sub(lambda m: f'"{demodulated_map.get(m.group(1), m.group(1))}"', text)
+
 
     def get_charset(self, lang):
         return self.language_info.get(lang, {}).get("charset", "UTF-8")
@@ -178,27 +191,31 @@ class Translator:
         print(f"Total API calls made: {self.api_call_count}")
 
 
+
+
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python translate.py <directory_path> [-no41]")
+    args = sys.argv[1:]
+
+    if not args:
+        print("Error: No directory path provided.")
         sys.exit(1)
 
-    parser = argparse.ArgumentParser(description="Translate script.")
-    parser.add_argument("directory", type=str, help="Path to the translation directory")
-    parser.add_argument("-no41", action="store_true", help="Skip b41 translations")
+    path_arg = args[0]
+    base_dir = Path(path_arg).resolve()
 
-    args = parser.parse_args()
-    base_dir = Path(args.directory).resolve()
-    no41 = args.no41
+    no41 = "-no41" in args
+    enabled_languages = [arg.lstrip('-') for arg in args[1:] if arg.startswith('-') and arg not in ["-no41"]]
 
     if not base_dir.is_dir():
         print(f"Invalid directory: {base_dir}")
         sys.exit(1)
 
+    print(f"\nBeginning Translation: Args:  -Ignore B41: {no41}  -Languages: {'ALL' if not enabled_languages else ', '.join(enabled_languages)}")
+
     total_start_time = time.perf_counter()
     with ThreadPoolExecutor() as executor:
         futures = [
-            executor.submit(Translator(translate_dir, no41).translate_files)
+            executor.submit(Translator(translate_dir, no41, enabled_languages).translate_files)
             for translate_dir in base_dir.rglob("Translate")
         ]
 
