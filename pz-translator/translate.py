@@ -43,7 +43,7 @@ class Translator:
         return text
 
     def load_language_info(self, file_name):
-        json_path = Path(__file__).parent.parent / file_name
+        json_path = Path(__file__).parent / file_name
         with open(json_path, "r", encoding="utf-8") as f:
             return json.load(f)
 
