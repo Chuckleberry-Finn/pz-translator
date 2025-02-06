@@ -3,13 +3,30 @@
 #### <sup>[original concept](https://github.com/Poltergeist-PZ-Modding/pz-translator) by [Poltergeist](https://github.com/Poltergeist-ix).</sup>  
 <br/>
 
-## Requirements
+## How to use
+- Run the `pzTranslate.exe` (utilizes PyInstaller built PyQt GUI)
+- Select any directory to process.
+  - Any `Translate` subdirectories will be processed.
+  - Note: Google Translator has a 200k character daily limit.
+- Select if you would like B41 directories to be processed.
+- Select which Languages you would like files to be generated for.
+  - Note: Selecting no languages will enabled all languages.
+<br/>
+<br/>
 
-- Python 3.11
-- [deep_translator](https://pypi.org/project/deep-translator/) <sup><sub>*(Developed with 1.11.4)*</sup></sub>  
+### Developed Using
+#### Note: You can also download these programs if you wish to modify any stage of the translation process.
+| Dependency                                                                                     | Purpose |
+|------------------------------------------------------------------------------------------------|---------|
+| [**Python**](https://www.python.org/downloads/) <sup><sub>3.10+</sup></sub>                    | Runs the translation and GUI scripts. |
+| [**deep_translator**](https://pypi.org/project/deep-translator/) <sup><sub>1.11.4+</sup></sub> | Handles automated language translation via Google Translate. |
+| [**PyQt5**](https://pypi.org/project/PyQt5/) <sup><sub>5.15.11+</sup></sub>                    | Provides the graphical user interface (GUI). |
+| [**PyInstaller**](https://pypi.org/project/pyinstaller/) <sup><sub>6.11.1+</sup></sub>         | Packages the Python script into a standalone executable.
 <br/>
 
 ## How to use
+
+Run the `pzTranslate.exe` which is a PyQt
 
 run `repository/pz-translator/translate.py` with any relative path to any directory you want processed as a parameter, additionally skip over B41 directories using `-no41`
 
