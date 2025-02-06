@@ -5,6 +5,7 @@
 
 ## How to use
 - Run the `pzTranslate.exe` (utilizes PyInstaller built PyQt GUI)
+![image](https://github.com/user-attachments/assets/4ffa3920-29fd-4de7-9ecf-24ab3a62d45a)
 - Select any directory to process.
   - Any `Translate` subdirectories will be processed.
   - Note: Google Translator has a 200k character daily limit.
