@@ -10,6 +10,7 @@ from PyQt5.QtCore import Qt, QThread, pyqtSignal
 
 class TranslationThread(QThread):
     output_signal = pyqtSignal(str)  # Signal to send output logs to the GUI
+    finished_signal = pyqtSignal()  # Signal to indicate process completion
 
     def __init__(self, base_dir, directory, no41_flag, selected_languages):
         super().__init__()
@@ -24,9 +25,9 @@ class TranslationThread(QThread):
 
         # Determine correct Python executable
         if getattr(sys, 'frozen', False):
-            python_exec = "python"  # Use system-installed Python instead of self-referencing
+            python_exec = "python"  # Use system-installed Python
         else:
-            python_exec = sys.executable  # Normal execution inside Python environment
+            python_exec = sys.executable  # Normal Python script execution
 
         command = [python_exec, os.path.join(self.base_dir, "translate.py"), self.directory, self.no41_flag] + lang_args
         command = [arg for arg in command if arg]  # Remove empty arguments
@@ -35,12 +36,14 @@ class TranslationThread(QThread):
 
         process = subprocess.Popen(
             command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-            creationflags=subprocess.CREATE_NO_WINDOW
+            creationflags=subprocess.CREATE_NO_WINDOW,
+            bufsize=1, universal_newlines=True
         )
 
         # Read output in real-time
         for line in iter(process.stdout.readline, ""):
             self.output_signal.emit(line.strip())
+            self.msleep(50)  # Prevent UI lockups
 
         # Capture errors
         stderr_output = process.stderr.read()
@@ -52,6 +55,7 @@ class TranslationThread(QThread):
         process.wait()
 
         self.output_signal.emit("\nTranslation Complete.")
+        self.finished_signal.emit()
 
 class TranslatorGUI(QWidget):
     def __init__(self):
@@ -153,10 +157,20 @@ class TranslatorGUI(QWidget):
             if self.lang_list.item(i).checkState() == Qt.Checked
         ]
 
+        # Disable Start Button during translation
+        self.start_btn.setEnabled(False)
+        self.start_btn.setText("Translating...")
+
         # Start the translation process in a separate thread
         self.translation_thread = TranslationThread(self.base_dir, directory, no41_flag, selected_languages)
         self.translation_thread.output_signal.connect(self.output_log.append)  # Send output to GUI
+        self.translation_thread.finished_signal.connect(self.translation_finished)  # Re-enable button when done
         self.translation_thread.start()
+
+    def translation_finished(self):
+        """Re-enables the Start Button after translation completes."""
+        self.start_btn.setEnabled(True)
+        self.start_btn.setText("Start Translation")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
