@@ -3,9 +3,8 @@
 #### <sup>[original concept](https://github.com/Poltergeist-PZ-Modding/pz-translator) by [Poltergeist](https://github.com/Poltergeist-ix).</sup>  
 <br/>
 
-## How to use
+## How to Use (Simple)
 - Run the `pzTranslate.exe` (utilizes PyInstaller built PyQt GUI)
-![image](https://github.com/user-attachments/assets/4ffa3920-29fd-4de7-9ecf-24ab3a62d45a)
 - Select any directory to process.
   - Any `Translate` subdirectories will be processed.
   - Note: Google Translator has a 200k character daily limit.
@@ -25,11 +24,10 @@
 | [**PyInstaller**](https://pypi.org/project/pyinstaller/) <sup><sub>6.11.1+</sup></sub>         | Packages the Python script into a standalone executable.
 <br/>
 
-## How to use
+## How to Use (Complex)
 
-Run the `pzTranslate.exe` which is a PyQt
-
-run `repository/pz-translator/translate.py` with any relative path to any directory you want processed as a parameter, additionally skip over B41 directories using `-no41`
+In any CLI (cmd), run `repository/pz-translator/translate.py` with any relative path to any directory you want processed.<br/>
+Additionally skip over B41 directories using ` -no41`
 
 **Example Parameters:**
 
@@ -47,7 +45,8 @@ For all mods:
 ```
 
 - The script will parse through every subdirectory to find any `\Translate` directories.
-- Note: Depending on the position relative to a \mods\ folder, the script will utilize  encodings for either B41 or B42.  
+- Note: Depending on the position relative to a \mods\ folder, the script will utilize  encodings for either B41 or B42.
+- Note: If you install PyQt you can also run the `TranslateGUI.py` directly as is.
 <br/>
 
 ### IntelliJ
