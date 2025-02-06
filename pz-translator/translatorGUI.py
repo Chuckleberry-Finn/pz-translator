@@ -8,6 +8,8 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
 
+SETTINGS_FILE = "translator_settings.json"
+
 class TranslationThread(QThread):
     output_signal = pyqtSignal(str)  # Signal to send output logs to the GUI
     finished_signal = pyqtSignal()  # Signal to indicate process completion
@@ -77,6 +79,7 @@ class TranslatorGUI(QWidget):
             self.base_dir = script_dir  # Last fallback
 
         self.initUI()
+        self.load_settings()
 
     def initUI(self):
         layout = QVBoxLayout()
@@ -171,6 +174,45 @@ class TranslatorGUI(QWidget):
         """Re-enables the Start Button after translation completes."""
         self.start_btn.setEnabled(True)
         self.start_btn.setText("Start Translation")
+
+    def load_settings(self):
+        """Loads saved settings from a JSON file."""
+        if os.path.exists(SETTINGS_FILE):
+            with open(SETTINGS_FILE, "r") as f:
+                settings = json.load(f)
+                self.dir_path.setText(settings.get("directory", "No directory selected"))
+                self.b41_checkbox.setChecked(settings.get("b41_disabled", False))
+                selected_languages = settings.get("selected_languages", [])
+                for i in range(self.lang_list.count()):
+                    item = self.lang_list.item(i)
+                    if item.text() in selected_languages:
+                        item.setCheckState(Qt.Checked)
+
+    def save_settings(self):
+        """Saves user settings to a JSON file."""
+        selected_languages = [
+            self.lang_list.item(i).text() for i in range(self.lang_list.count())
+            if self.lang_list.item(i).checkState() == Qt.Checked
+        ]
+        settings = {
+            "directory": self.dir_path.text(),
+            "b41_disabled": self.b41_checkbox.isChecked(),
+            "selected_languages": selected_languages
+        }
+        with open(SETTINGS_FILE, "w") as f:
+            json.dump(settings, f, indent=4)
+
+    def select_directory(self):
+        """Opens a file dialog to select the translation directory."""
+        dir_path = QFileDialog.getExistingDirectory(self, "Select Directory")
+        if dir_path:
+            self.dir_path.setText(dir_path)
+            self.save_settings()
+
+    def closeEvent(self, event):
+        """Saves settings when the GUI is closed."""
+        self.save_settings()
+        event.accept()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
