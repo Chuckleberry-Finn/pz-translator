@@ -4,6 +4,11 @@ echo Running PyInstaller to build executable...
 :: Ensure Python is in PATH (or manually set its full path)
 set PYTHON_EXECUTABLE="C:\Program Files\Python312\python.exe"
 
+:: Install dependencies
+echo Installing required dependencies...
+%PYTHON_EXECUTABLE% -m pip install --upgrade pip
+%PYTHON_EXECUTABLE% -m pip install PyQt5 deep_translator
+
 :: Define paths
 set SCRIPT_PATH=..\pz-translator\translatorGUI.py
 set EXE_NAME=pzTranslate
