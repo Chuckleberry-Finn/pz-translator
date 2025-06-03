@@ -139,6 +139,7 @@ class Translator:
             lang_path = self.get_translation_path(lang)
             lang_path.mkdir(exist_ok=True)
             text_map = {}
+            charset = self.get_charset(lang)  # Retrieve charset for the language
 
             for file in files:
                 try:
@@ -169,7 +170,7 @@ class Translator:
                         translated_lines.append(self.QUOTED_TEXT_REGEX.sub(lambda m: f'"{translated_map.get(m.group(1), m.group(1))}"', line))
 
                     dest_file = lang_path / file.relative_to(source_path).with_name(file.stem.replace("_EN", f"_{lang}") + file.suffix)
-                    with open(dest_file, "w", encoding="utf-8", errors="replace") as f:
+                    with open(dest_file, "w", encoding=charset, errors="replace") as f:
                         f.writelines(translated_lines)
                 except Exception as e:
                     print(f"Error writing {file.name}: {e}")
@@ -180,7 +181,6 @@ class Translator:
                     future.result()
 
             lang_elapsed_time = (time.perf_counter() - lang_start_time) * 1000
-            charset = self.get_charset(lang)  # Retrieve charset for the language
             print(f"Completed: {self.clean_path_for_display(self.root)} - {lang} in {lang_elapsed_time:.2f} ms (Encoding: {charset})")
 
         with ThreadPoolExecutor() as lang_executor:
