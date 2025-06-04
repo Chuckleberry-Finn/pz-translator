@@ -169,7 +169,7 @@ class Translator:
                         translated_lines.append(self.QUOTED_TEXT_REGEX.sub(lambda m: f'"{translated_map.get(m.group(1), m.group(1))}"', line))
 
                     dest_file = lang_path / file.relative_to(source_path).with_name(file.stem.replace("_EN", f"_{lang}") + file.suffix)
-                    with open(dest_file, "w", encoding="utf-8", errors="replace") as f:
+                    with open(dest_file, "w", encoding=self.get_charset(lang), errors="replace") as f:
                         f.writelines(translated_lines)
                 except Exception as e:
                     print(f"Error writing {file.name}: {e}")
