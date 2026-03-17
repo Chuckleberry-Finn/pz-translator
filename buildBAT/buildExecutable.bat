@@ -18,7 +18,6 @@ set OUTPUT_PATH=..
 %PYTHON_EXECUTABLE% -m PyInstaller --onefile --windowed --name %EXE_NAME% ^
     --add-data "..\..\pz-translator\translate.py;pz-translator" ^
     --add-data "..\..\pz-translator\LanguagesInfo_b42.json;pz-translator" ^
-    --add-data "..\..\pz-translator\LanguagesInfo_b41.json;pz-translator" ^
     --workpath build ^
     --specpath build ^
     --distpath %OUTPUT_PATH% ^

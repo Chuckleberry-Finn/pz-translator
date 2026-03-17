@@ -1,218 +1,334 @@
+import re
 import sys
 import os
-import subprocess
 import json
+import subprocess
+from pathlib import Path
+
 from PyQt5.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QPushButton, QFileDialog, QLabel,
-    QCheckBox, QListWidget, QListWidgetItem, QTextEdit
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
+    QFileDialog, QLabel, QCheckBox, QListWidget, QListWidgetItem,
+    QTextEdit, QGroupBox, QComboBox, QSizePolicy, QProgressBar
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
+from PyQt5.QtGui import QFont, QTextCursor
 
 SETTINGS_FILE = "translator_settings.json"
 
-class TranslationThread(QThread):
-    output_signal = pyqtSignal(str)  # Signal to send output logs to the GUI
-    finished_signal = pyqtSignal()  # Signal to indicate process completion
+LANG_LINE_RE = re.compile(r'^\s{2}[A-Z]{2,6}\s')
 
-    def __init__(self, base_dir, directory, no41_flag, selected_languages):
+
+def count_translate_dirs(directory: str) -> int:
+    base = Path(directory).resolve()
+    count = 0
+    for d in base.rglob("Translate"):
+        if not d.is_dir():
+            continue
+        current = d
+        is_b41 = False
+        while current != current.parent:
+            if current.name.lower() == "mods":
+                is_b41 = len(d.relative_to(current).parts) == 5
+                break
+            current = current.parent
+        if not is_b41:
+            count += 1
+    return count
+
+
+class TranslationThread(QThread):
+    output_signal   = pyqtSignal(str)
+    progress_signal = pyqtSignal(int)
+    finished_signal = pyqtSignal()
+
+    def __init__(self, base_dir, directory, source_lang, selected_languages, overwrite):
         super().__init__()
-        self.base_dir = base_dir
-        self.directory = directory
-        self.no41_flag = no41_flag
+        self.base_dir           = base_dir
+        self.directory          = directory
+        self.source_lang        = source_lang
         self.selected_languages = selected_languages
+        self.overwrite          = overwrite
 
     def run(self):
-        """Runs the translation script in a separate thread."""
-        lang_args = [f"-{lang}" for lang in self.selected_languages]
+        python_exec = "python" if getattr(sys, 'frozen', False) else sys.executable
+        translate   = os.path.join(self.base_dir, "translate.py")
 
-        # Determine correct Python executable
-        if getattr(sys, 'frozen', False):
-            python_exec = "python"  # Use system-installed Python
-        else:
-            python_exec = sys.executable  # Normal Python script execution
+        command = [python_exec, translate, self.directory]
+        if self.source_lang and self.source_lang != "EN":
+            command += ["-source", self.source_lang]
+        if self.overwrite:
+            command.append("-overwrite")
+        if self.selected_languages:
+            command += ["-languages"] + self.selected_languages
 
-        command = [python_exec, os.path.join(self.base_dir, "translate.py"), self.directory, self.no41_flag] + lang_args
-        command = [arg for arg in command if arg]  # Remove empty arguments
+        completed = 0
+        try:
+            process = subprocess.Popen(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding="utf-8",
+                creationflags=subprocess.CREATE_NO_WINDOW,
+                bufsize=1,
+                universal_newlines=True,
+            )
 
-        self.output_signal.emit(f"Running command: {' '.join(command)}\n")
+            for line in iter(process.stdout.readline, ""):
+                stripped = line.rstrip()
+                self.output_signal.emit(stripped)
+                if LANG_LINE_RE.match(stripped):
+                    completed += 1
+                    self.progress_signal.emit(completed)
 
-        process = subprocess.Popen(
-            command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-            creationflags=subprocess.CREATE_NO_WINDOW,
-            bufsize=1, universal_newlines=True
-        )
+            stderr_out = process.stderr.read()
+            if stderr_out:
+                self.output_signal.emit(f"[!] {stderr_out.strip()}")
 
-        # Read output in real-time
-        for line in iter(process.stdout.readline, ""):
-            self.output_signal.emit(line.strip())
-            self.msleep(50)  # Prevent UI lockups
+            process.stdout.close()
+            process.stderr.close()
+            process.wait()
+        finally:
+            self.finished_signal.emit()
 
-        # Capture errors
-        stderr_output = process.stderr.read()
-        if stderr_output:
-            self.output_signal.emit(f"Error: {stderr_output.strip()}")
-
-        process.stdout.close()
-        process.stderr.close()
-        process.wait()
-
-        self.output_signal.emit("\nTranslation Complete.")
-        self.finished_signal.emit()
 
 class TranslatorGUI(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Translation Script GUI")
-        self.setGeometry(100, 100, 600, 400)
+        self.setWindowTitle("PZ Translation Tool")
+        self.setMinimumSize(600, 640)
 
-        # Determine base directory dynamically
-        exe_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else None
+        self.base_dir  = self._resolve_base_dir()
+        self.lang_info = self._load_lang_info()
+        self._thread   = None
+        self._progress_total = 0
+
+        self._build_ui()
+        self._load_settings()
+
+    def _resolve_base_dir(self) -> str:
+        exe_dir    = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else None
         script_dir = os.path.dirname(os.path.abspath(__file__))
+        for candidate in [
+            exe_dir    and os.path.join(exe_dir,    "pz-translator"),
+            os.path.join(script_dir, "pz-translator"),
+            script_dir,
+        ]:
+            if candidate and os.path.exists(candidate):
+                return candidate
+        return script_dir
 
-        # Check if "pz-translator" exists next to the executable
-        if exe_dir and os.path.exists(os.path.join(exe_dir, "pz-translator")):
-            self.base_dir = os.path.join(exe_dir, "pz-translator")
-        # Fallback to script directory
-        elif os.path.exists(os.path.join(script_dir, "pz-translator")):
-            self.base_dir = os.path.join(script_dir, "pz-translator")
-        else:
-            self.base_dir = script_dir  # Last fallback
+    def _load_lang_info(self) -> dict:
+        path = os.path.join(self.base_dir, "LanguagesInfo_b42.json")
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
 
-        self.initUI()
-        self.load_settings()
-
-    def initUI(self):
+    def _build_ui(self):
         layout = QVBoxLayout()
+        layout.setSpacing(8)
 
-        # Directory Selection
-        self.dir_label = QLabel("Select Translation Directory:")
-        self.dir_path = QLabel("No directory selected")
-        self.dir_path.setWordWrap(True)
-        self.select_dir_btn = QPushButton("Browse")
-        self.select_dir_btn.clicked.connect(self.select_directory)
+        dir_group  = QGroupBox("Target Directory")
+        dir_layout = QHBoxLayout()
+        self.dir_label = QLabel("No directory selected")
+        self.dir_label.setWordWrap(True)
+        self.dir_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        browse_btn = QPushButton("Browse")
+        browse_btn.setFixedWidth(80)
+        browse_btn.clicked.connect(self._browse)
+        dir_layout.addWidget(self.dir_label)
+        dir_layout.addWidget(browse_btn)
+        dir_group.setLayout(dir_layout)
+        layout.addWidget(dir_group)
 
-        layout.addWidget(self.dir_label)
-        layout.addWidget(self.dir_path)
-        layout.addWidget(self.select_dir_btn)
+        opts_group  = QGroupBox("Options")
+        opts_layout = QVBoxLayout()
 
-        # B41 Checkbox
-        self.b41_checkbox = QCheckBox("Disable B41 Translations (-no41)")
-        layout.addWidget(self.b41_checkbox)
+        self.overwrite_check = QCheckBox("Overwrite existing translated keys (default: skip existing)")
+        opts_layout.addWidget(self.overwrite_check)
 
-        # Language Selection
-        self.lang_label = QLabel("Select Languages:")
+        src_row = QHBoxLayout()
+        src_row.addWidget(QLabel("Source language:"))
+        self.source_combo = QComboBox()
+        self.source_combo.addItems(sorted(self.lang_info.keys()))
+        self.source_combo.setCurrentText("EN")
+        self.source_combo.setFixedWidth(80)
+        src_row.addWidget(self.source_combo)
+        src_row.addStretch()
+        opts_layout.addLayout(src_row)
+
+        opts_group.setLayout(opts_layout)
+        layout.addWidget(opts_group)
+
+        lang_group  = QGroupBox("Target Languages  (none selected = all languages)")
+        lang_layout = QVBoxLayout()
+
+        btn_row = QHBoxLayout()
+        select_all_btn   = QPushButton("Select All")
+        deselect_all_btn = QPushButton("Deselect All")
+        select_all_btn.clicked.connect(self._select_all)
+        deselect_all_btn.clicked.connect(self._deselect_all)
+        btn_row.addWidget(select_all_btn)
+        btn_row.addWidget(deselect_all_btn)
+        btn_row.addStretch()
+        lang_layout.addLayout(btn_row)
+
         self.lang_list = QListWidget()
-        self.lang_list.setSelectionMode(QListWidget.MultiSelection)
-        layout.addWidget(self.lang_label)
-        layout.addWidget(self.lang_list)
+        self.lang_list.setSelectionMode(QListWidget.NoSelection)
+        for code, info in sorted(self.lang_info.items()):
+            if code == "EN":
+                continue
+            item = QListWidgetItem(f"{code}  –  {info.get('text', '')}")
+            item.setData(Qt.UserRole, code)
+            item.setCheckState(Qt.Unchecked)
+            self.lang_list.addItem(item)
 
-        # Load Languages
-        self.load_languages()
+        lang_layout.addWidget(self.lang_list)
+        lang_group.setLayout(lang_layout)
+        layout.addWidget(lang_group, stretch=1)
 
-        # Start Button
-        self.start_btn = QPushButton("Start Translation")
-        self.start_btn.clicked.connect(self.run_translation)
+        self.start_btn = QPushButton("▶  Start Translation")
+        self.start_btn.setFixedHeight(36)
+        self.start_btn.clicked.connect(self._run)
         layout.addWidget(self.start_btn)
 
-        # Output Log
-        self.output_log = QTextEdit()
-        self.output_log.setReadOnly(True)
-        layout.addWidget(QLabel("Output Log:"))
-        layout.addWidget(self.output_log)
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setFixedHeight(24)
+        self.progress_bar.setVisible(False)
+        self.progress_bar.setTextVisible(True)
+        layout.addWidget(self.progress_bar)
 
-        # Quit Button
-        self.quit_btn = QPushButton("Quit")
-        self.quit_btn.clicked.connect(self.close)
-        layout.addWidget(self.quit_btn)
+        log_group  = QGroupBox("Output Log")
+        log_layout = QVBoxLayout()
+        clear_btn  = QPushButton("Clear")
+        clear_btn.setFixedWidth(60)
+        self.log = QTextEdit()
+        self.log.setReadOnly(True)
+        self.log.setFont(QFont("Courier New", 9))
+        self.log.setLineWrapMode(QTextEdit.NoWrap)
+        clear_btn.clicked.connect(self.log.clear)
+        log_layout.addWidget(clear_btn)
+        log_layout.addWidget(self.log)
+        log_group.setLayout(log_layout)
+        layout.addWidget(log_group, stretch=1)
+
+        quit_btn = QPushButton("Quit")
+        quit_btn.setFixedHeight(30)
+        quit_btn.clicked.connect(self.close)
+        layout.addWidget(quit_btn)
 
         self.setLayout(layout)
 
-    def load_languages(self):
-        """Loads available languages from the language info files."""
-        lang_info_path = os.path.join(self.base_dir, "LanguagesInfo_b42.json")
-        try:
-            with open(lang_info_path, "r", encoding="utf-8") as f:
-                lang_data = json.load(f)
-                for lang in lang_data:
-                    if lang != "EN":
-                        item = QListWidgetItem(lang)
-                        item.setCheckState(Qt.Unchecked)
-                        self.lang_list.addItem(item)
-        except Exception as e:
-            self.output_log.append(f"Error loading languages: {e}")
+    def _browse(self):
+        path = QFileDialog.getExistingDirectory(self, "Select Directory")
+        if path:
+            self.dir_label.setText(path)
+            self._save_settings()
 
-    def select_directory(self):
-        """Opens a file dialog to select the translation directory."""
-        dir_path = QFileDialog.getExistingDirectory(self, "Select Directory")
-        if dir_path:
-            self.dir_path.setText(dir_path)
+    def _select_all(self):
+        for i in range(self.lang_list.count()):
+            self.lang_list.item(i).setCheckState(Qt.Checked)
 
-    def run_translation(self):
-        """Starts the translation process asynchronously using QThread."""
-        directory = self.dir_path.text()
+    def _deselect_all(self):
+        for i in range(self.lang_list.count()):
+            self.lang_list.item(i).setCheckState(Qt.Unchecked)
+
+    def _append_log(self, text: str):
+        cursor = self.log.textCursor()
+        cursor.movePosition(QTextCursor.End)
+        cursor.insertText(text + "\n")
+        self.log.setTextCursor(cursor)
+        self.log.ensureCursorVisible()
+
+    def _run(self):
+        directory = self.dir_label.text()
         if directory == "No directory selected":
-            self.output_log.append("Error: No directory selected.")
+            self._append_log("[!] No directory selected.")
             return
 
-        no41_flag = "-no41" if self.b41_checkbox.isChecked() else ""
-        selected_languages = [
-            self.lang_list.item(i).text() for i in range(self.lang_list.count())
+        selected = [
+            self.lang_list.item(i).data(Qt.UserRole)
+            for i in range(self.lang_list.count())
             if self.lang_list.item(i).checkState() == Qt.Checked
         ]
 
-        # Disable Start Button during translation
+        lang_count = len(selected) if selected else len([
+            k for k in self.lang_info if k != self.source_combo.currentText()
+        ])
+        folder_count       = count_translate_dirs(directory)
+        self._progress_total = lang_count * folder_count
+
         self.start_btn.setEnabled(False)
-        self.start_btn.setText("Translating...")
+        self.start_btn.setText("Translating…")
 
-        # Start the translation process in a separate thread
-        self.translation_thread = TranslationThread(self.base_dir, directory, no41_flag, selected_languages)
-        self.translation_thread.output_signal.connect(self.output_log.append)  # Send output to GUI
-        self.translation_thread.finished_signal.connect(self.translation_finished)  # Re-enable button when done
-        self.translation_thread.start()
+        self.progress_bar.setRange(0, max(self._progress_total, 1))
+        self.progress_bar.setValue(0)
+        self.progress_bar.setFormat(f"0 / {self._progress_total} languages")
+        self.progress_bar.setVisible(True)
 
-    def translation_finished(self):
-        """Re-enables the Start Button after translation completes."""
+        self._thread = TranslationThread(
+            base_dir           = self.base_dir,
+            directory          = directory,
+            source_lang        = self.source_combo.currentText(),
+            selected_languages = selected,
+            overwrite          = self.overwrite_check.isChecked(),
+        )
+        self._thread.output_signal.connect(self._append_log)
+        self._thread.progress_signal.connect(self._on_progress)
+        self._thread.finished_signal.connect(self._done)
+        self._thread.start()
+
+    def _on_progress(self, completed: int):
+        self.progress_bar.setValue(completed)
+        self.progress_bar.setFormat(f"{completed} / {self._progress_total} languages")
+
+    def _done(self):
+        self.progress_bar.setValue(self._progress_total)
+        self.progress_bar.setFormat(f"Done — {self._progress_total} languages")
         self.start_btn.setEnabled(True)
-        self.start_btn.setText("Start Translation")
+        self.start_btn.setText("▶  Start Translation")
 
-    def load_settings(self):
-        """Loads saved settings from a JSON file."""
-        if os.path.exists(SETTINGS_FILE):
-            with open(SETTINGS_FILE, "r") as f:
-                settings = json.load(f)
-                self.dir_path.setText(settings.get("directory", "No directory selected"))
-                self.b41_checkbox.setChecked(settings.get("b41_disabled", False))
-                selected_languages = settings.get("selected_languages", [])
-                for i in range(self.lang_list.count()):
-                    item = self.lang_list.item(i)
-                    if item.text() in selected_languages:
-                        item.setCheckState(Qt.Checked)
+    def _load_settings(self):
+        if not os.path.exists(SETTINGS_FILE):
+            return
+        try:
+            with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+                s = json.load(f)
+            self.dir_label.setText(s.get("directory", "No directory selected"))
+            self.overwrite_check.setChecked(s.get("overwrite", False))
+            idx = self.source_combo.findText(s.get("source_lang", "EN"))
+            if idx >= 0:
+                self.source_combo.setCurrentIndex(idx)
+            selected = set(s.get("selected_languages", []))
+            for i in range(self.lang_list.count()):
+                item = self.lang_list.item(i)
+                item.setCheckState(Qt.Checked if item.data(Qt.UserRole) in selected else Qt.Unchecked)
+        except Exception as e:
+            self._append_log(f"[!] Could not load settings: {e}")
 
-    def save_settings(self):
-        """Saves user settings to a JSON file."""
-        selected_languages = [
-            self.lang_list.item(i).text() for i in range(self.lang_list.count())
+    def _save_settings(self):
+        selected = [
+            self.lang_list.item(i).data(Qt.UserRole)
+            for i in range(self.lang_list.count())
             if self.lang_list.item(i).checkState() == Qt.Checked
         ]
-        settings = {
-            "directory": self.dir_path.text(),
-            "b41_disabled": self.b41_checkbox.isChecked(),
-            "selected_languages": selected_languages
-        }
-        with open(SETTINGS_FILE, "w") as f:
-            json.dump(settings, f, indent=4)
-
-    def select_directory(self):
-        """Opens a file dialog to select the translation directory."""
-        dir_path = QFileDialog.getExistingDirectory(self, "Select Directory")
-        if dir_path:
-            self.dir_path.setText(dir_path)
-            self.save_settings()
+        try:
+            with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+                json.dump({
+                    "directory":          self.dir_label.text(),
+                    "overwrite":          self.overwrite_check.isChecked(),
+                    "source_lang":        self.source_combo.currentText(),
+                    "selected_languages": selected,
+                }, f, indent=4)
+        except Exception as e:
+            self._append_log(f"[!] Could not save settings: {e}")
 
     def closeEvent(self, event):
-        """Saves settings when the GUI is closed."""
-        self.save_settings()
+        self._save_settings()
         event.accept()
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
